@@ -1,11 +1,16 @@
 import { getNodesBounds, MiniMap, Panel, useStore, type Rect } from '@xyflow/react'
-import { useId, useMemo } from 'react'
+import { Fragment, useId, useMemo } from 'react'
 
 const MINIMAP_MAX_WIDTH = 200
 const MINIMAP_MAX_HEIGHT = 150
 const VIEWPORT_RADIUS = 8
 const LENS_BAND = 16
 const LENS_SCALE = 24
+const LENS_CHANNELS = [
+  { name: 'red', scale: 1.05, matrix: '1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0' },
+  { name: 'green', scale: 1, matrix: '0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0' },
+  { name: 'blue', scale: 0.95, matrix: '0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0' },
+] as const
 
 const getLensMap = ({
   width,
@@ -110,58 +115,6 @@ export const SchemaGraphMiniMap = () => {
 
   return (
     <>
-      {lensMap ? (
-        <svg aria-hidden className="absolute size-0">
-          <filter
-            id={lensId}
-            x="0"
-            y="0"
-            width="1"
-            height="1"
-            primitiveUnits="objectBoundingBox"
-            colorInterpolationFilters="sRGB"
-          >
-            <feImage
-              href={lensMap}
-              x="0"
-              y="0"
-              width="1"
-              height="1"
-              preserveAspectRatio="none"
-              result="map"
-            />
-            <feDisplacementMap
-              in="SourceGraphic"
-              in2="map"
-              scale={lensScale * 1.05}
-              xChannelSelector="R"
-              yChannelSelector="G"
-              result="red"
-            />
-            <feDisplacementMap
-              in="SourceGraphic"
-              in2="map"
-              scale={lensScale}
-              xChannelSelector="R"
-              yChannelSelector="G"
-              result="green"
-            />
-            <feDisplacementMap
-              in="SourceGraphic"
-              in2="map"
-              scale={lensScale * 0.95}
-              xChannelSelector="R"
-              yChannelSelector="G"
-              result="blue"
-            />
-            <feColorMatrix in="red" values="1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0" result="r" />
-            <feColorMatrix in="green" values="0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0" result="g" />
-            <feColorMatrix in="blue" values="0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0" result="b" />
-            <feBlend in="r" in2="g" mode="screen" result="rg" />
-            <feBlend in="rg" in2="b" mode="screen" />
-          </filter>
-        </svg>
-      ) : null}
       <MiniMap
         pannable
         zoomable
@@ -178,11 +131,44 @@ export const SchemaGraphMiniMap = () => {
         style={{ width, height }}
         className="floating-surface-shadow-xs pointer-events-none rounded-md overflow-hidden mr-2.75! mb-11!"
       >
-        <div
-          style={{ clipPath: `path(evenodd, '${maskPath}')` }}
-          className="size-full bg-foreground/5"
-        />
-        <svg aria-hidden width={width} height={height} className="absolute inset-0">
+        <svg aria-hidden width={width} height={height}>
+          {lensMap ? (
+            <filter
+              id={lensId}
+              x="0"
+              y="0"
+              width="1"
+              height="1"
+              primitiveUnits="objectBoundingBox"
+              colorInterpolationFilters="sRGB"
+            >
+              <feImage
+                href={lensMap}
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                preserveAspectRatio="none"
+                result="map"
+              />
+              {LENS_CHANNELS.map(({ name, scale, matrix }) => (
+                <Fragment key={name}>
+                  <feDisplacementMap
+                    in="SourceGraphic"
+                    in2="map"
+                    scale={lensScale * scale}
+                    xChannelSelector="R"
+                    yChannelSelector="G"
+                    result={name}
+                  />
+                  <feColorMatrix in={name} values={matrix} result={`${name}-only`} />
+                </Fragment>
+              ))}
+              <feBlend in="red-only" in2="green-only" mode="screen" result="red-green" />
+              <feBlend in="red-green" in2="blue-only" mode="screen" />
+            </filter>
+          ) : null}
+          <path d={maskPath} fillRule="evenodd" className="fill-foreground/5" />
           <rect
             x={x + 0.25}
             y={y + 0.25}
